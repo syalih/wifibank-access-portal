@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WifiBank • Secure Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+</head>
+<body class="h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+  <!-- Session timeout banner (auto hides when active) -->
+  <div id="timeoutBanner" class="hidden w-full bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200 text-sm py-2">
+    <div class="max-w-2xl mx-auto px-4 flex items-center justify-between">
+      <span>For your security, you will be signed out in <strong id="timeoutCountdown">60</strong> seconds due to inactivity.</span>
+      <button id="staySignedIn" class="px-3 py-1 rounded-md bg-amber-200/70 hover:bg-amber-300 dark:bg-amber-800/50">Stay signed in</button>
+    </div>
+  </div>
+
+  <main class="min-h-[calc(100vh-40px)] flex items-center justify-center p-4">
+    <div class="w-full max-w-xl">
+      <!-- Top bar: brand + theme + language (RTL aware) -->
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 shadow ring-2 ring-white/20 dark:ring-black/20"></div>
+          <span class="font-semibold text-lg">WifiBank</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <select id="lang" class="text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md px-2 py-1">
+            <option value="en" selected>English</option>
+            <option value="ar">العربية</option>
+          </select>
+          <button id="themeBtn" type="button" class="text-sm px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900" aria-pressed="false">🌙 Dark</button>
+        </div>
+      </div>
+
+      <!-- Card -->
+      <div class="rounded-2xl bg-white dark:bg-slate-900 shadow-xl ring-1 ring-black/5 dark:ring-white/5 overflow-hidden">
+        <div class="p-6 md:p-8">
+          <h1 id="title" class="text-2xl font-bold text-center">Secure Online Banking</h1>
+          <p id="subtitle" class="text-center text-slate-500 dark:text-slate-400 mt-1">Sign in to your account</p>
+
+          <!-- Status region -->
+          <div class="sr-only" id="status" aria-live="polite"></div>
+
+          <!-- Form -->
+          <form id="loginForm" class="mt-6 space-y-4" novalidate>
+            <!-- Customer ID -->
+            <div>
+              <label for="cid" class="block text-sm font-medium">Customer ID</label>
+              <input id="cid" name="cid" inputmode="numeric" autocomplete="username" placeholder="e.g., 12345678" required
+                     class="mt-1 block w-full px-4 py-3 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+              <p id="cidError" class="mt-1 text-xs text-red-600 hidden">Enter a valid Customer ID.</p>
+            </div>
+
+            <!-- Password/PIN -->
+            <div>
+              <div class="flex items-center justify-between">
+                <label for="password" class="block text-sm font-medium">Password / PIN</label>
+                <span id="capsWarning" class="hidden text-xs text-amber-600">Caps Lock is ON</span>
+              </div>
+              <div class="relative">
+                <input id="password" name="password" type="password" minlength="4" placeholder="••••••••" autocomplete="current-password" required
+                       class="mt-1 block w-full px-4 py-3 pr-24 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                <div class="absolute inset-y-0 right-0 flex items-center gap-1 pr-2">
+                  <button type="button" id="togglePwd" class="px-2 py-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200" aria-label="Show password">👁️</button>
+                  <button type="button" id="keypadToggle" class="px-2 py-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200" aria-label="Open virtual keypad">⌨️</button>
+                </div>
+              </div>
+              <p id="pwdError" class="mt-1 text-xs text-red-600 hidden">Enter your password (min 4 characters).</p>
+
+              <!-- Virtual keyboard (numeric & full) -->
+              <div id="vkContainer" class="hidden mt-3">
+                <div class="flex items-center justify-between mb-2 text-xs">
+                  <div class="inline-flex rounded-md border border-slate-200 dark:border-slate-800 overflow-hidden">
+                    <button id="vkModeNum" type="button" class="px-3 py-1.5 bg-slate-100 dark:bg-slate-800">123</button>
+                    <button id="vkModeFull" type="button" class="px-3 py-1.5">ABC</button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button id="vkShuffle" type="button" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">Shuffle</button>
+                    <button id="vkClose" type="button" class="px-3 py-1.5">Close</button>
+                  </div>
+                </div>
+                <div id="vkKeys" class="grid gap-2"></div>
+              </div>
+
+              <!-- Strength meter -->
+              <div class="mt-2">
+                <div class="h-1 w-full bg-slate-200 dark:bg-slate-800 rounded">
+                  <div id="strengthBar" class="h-1 w-1/12 bg-red-500 rounded transition-all"></div>
+                </div>
+                <p id="strengthLabel" class="mt-1 text-xs text-slate-500">Strength: weak</p>
+              </div>
+            </div>
+
+            <!-- Remember + Help -->
+            <div class="flex items-center justify-between text-sm">
+              <label class="flex items-center gap-2">
+                <input id="remember" type="checkbox" class="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500">
+                <span class="text-slate-600 dark:text-slate-300">Remember this device</span>
+              </label>
+              <a href="#" class="text-emerald-700 dark:text-emerald-400 hover:underline">Forgot login?</a>
+            </div>
+
+            <!-- Sign in button -->
+            <button id="submitBtn" type="submit" class="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-semibold transition">
+              <svg id="spinner" class="hidden animate-spin h-5 w-5" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+              <span id="signinText">Sign In</span>
+            </button>
+
+            <button id="webauthnBtn" type="button" class="mt-3 w-full border border-slate-300 dark:border-slate-800 py-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900">Use Face/Touch ID (WebAuthn)</button>
+
+            <!-- Security badges -->
+            <div class="mt-3 flex items-center justify-center gap-4 text-[11px] text-slate-500">
+              <span>🔒 256-bit TLS</span>
+              <span>🛡 Anti-phishing</span>
+              <span>👁️ Device monitoring</span>
+            </div>
+          </form>
+
+          <!-- Divider -->
+          <div class="my-6 flex items-center">
+            <div class="flex-grow h-px bg-slate-200 dark:bg-slate-800"></div>
+            <span class="px-4 text-slate-400 text-sm">or</span>
+            <div class="flex-grow h-px bg-slate-200 dark:bg-slate-800"></div>
+          </div>
+
+          <!-- Quick actions -->
+          <div class="grid grid-cols-2 gap-3">
+            <button class="border border-slate-300 dark:border-slate-800 py-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900">Register</button>
+            <button class="border border-slate-300 dark:border-slate-800 py-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900">Open an account</button>
+          </div>
+
+          <!-- Tips -->
+          <ul class="mt-6 text-xs text-slate-500 list-disc list-inside space-y-1">
+            <li>Never share your password, OTP, or CVV with anyone—even bank staff.</li>
+            <li>Always check the browser padlock and website domain before signing in.</li>
+            <li>Enable 2-Step Verification for extra protection.</li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="mt-4 text-center text-[11px] text-slate-500">© <span id="year"></span> WifiBank. All rights reserved.</p>
+    </div>
+  </main>
+
+  <!-- OTP Modal -->
+  <div id="otpModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50">
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-xl ring-1 ring-black/10 dark:ring-white/10 p-6">
+        <h2 id="otpTitle" class="text-xl font-semibold text-center">Enter One-Time Password</h2>
+        <p id="otpSubtitle" class="text-center text-slate-500 dark:text-slate-400 mt-1">We sent a 6-digit code to your phone</p>
+        <div class="mt-5 flex justify-center gap-2">
+          <input maxlength="1" class="otp w-10 h-12 text-center rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          <input maxlength="1" class="otp w-10 h-12 text-center rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          <input maxlength="1" class="otp w-10 h-12 text-center rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          <input maxlength="1" class="otp w-10 h-12 text-center rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          <input maxlength="1" class="otp w-10 h-12 text-center rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          <input maxlength="1" class="otp w-10 h-12 text-center rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+        </div>
+        <div class="mt-5 flex items-center justify-between text-sm">
+          <button id="resendOtp" class="text-emerald-700 dark:text-emerald-400 hover:underline">Resend code</button>
+          <span id="otpTimer" class="text-slate-500">00:30</span>
+        </div>
+        <div class="mt-5 grid grid-cols-2 gap-3">
+          <button id="otpCancel" class="border border-slate-300 dark:border-slate-800 py-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900">Cancel</button>
+          <button id="otpVerify" class="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg">Verify</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Theme toggle
+    const themeBtn = document.getElementById('themeBtn');
+    const root = document.documentElement;
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') root.classList.add('dark');
+    themeBtn.addEventListener('click', () => {
+      const isDark = root.classList.toggle('dark');
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      themeBtn.setAttribute('aria-pressed', String(isDark));
+      themeBtn.textContent = isDark ? '☀️ Light' : '🌙 Dark';
+    });
+
+    // Language & RTL toggle
+    const lang = document.getElementById('lang');
+    const dict = {
+      en: {
+        title: 'Secure Online Banking', subtitle: 'Sign in to your account', signin: 'Sign In',
+        otpTitle: 'Enter One-Time Password', otpSubtitle: 'We sent a 6-digit code to your phone',
+      },
+      ar: {
+        title: 'الخدمات المصرفية الآمنة عبر الإنترنت', subtitle: 'سجّل الدخول إلى حسابك', signin: 'تسجيل الدخول',
+        otpTitle: 'أدخل رمز التحقق لمرة واحدة', otpSubtitle: 'أرسلنا رمزًا مكونًا من 6 أرقام إلى هاتفك',
+      }
+    };
+    function applyLang(l){
+      document.getElementById('title').textContent = dict[l].title;
+      document.getElementById('subtitle').textContent = dict[l].subtitle;
+      document.getElementById('signinText').textContent = dict[l].signin;
+      document.getElementById('otpTitle').textContent = dict[l].otpTitle;
+      document.getElementById('otpSubtitle').textContent = dict[l].otpSubtitle;
+      document.documentElement.setAttribute('lang', l);
+      document.documentElement.setAttribute('dir', l==='ar' ? 'rtl' : 'ltr');
+    }
+    lang.addEventListener('change', (e)=> applyLang(e.target.value));
+
+    // Caps Lock detection
+    const password = document.getElementById('password');
+    const capsWarning = document.getElementById('capsWarning');
+    password.addEventListener('keyup', (e)=>{
+      capsWarning.classList.toggle('hidden', !e.getModifierState('CapsLock'));
+    });
+
+    // Password visibility
+    document.getElementById('togglePwd').addEventListener('click', ()=>{
+      const t = password.getAttribute('type') === 'password' ? 'text' : 'password';
+      password.setAttribute('type', t);
+    });
+
+    // Virtual keyboard (numeric & full)
+    const vkContainer = document.getElementById('vkContainer');
+    const vkKeys = document.getElementById('vkKeys');
+    const vkModeNum = document.getElementById('vkModeNum');
+    const vkModeFull = document.getElementById('vkModeFull');
+    const vkToggle = document.getElementById('keypadToggle');
+    const vkShuffle = document.getElementById('vkShuffle');
+    const vkClose = document.getElementById('vkClose');
+    let vkMode = 'num';
+    let vkShift = false;
+
+    function addKey(label, action, parent){
+      const btn = document.createElement('button');
+      btn.type='button';
+      btn.textContent = label;
+      btn.className = 'px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 min-w-[2.5rem]';
+      btn.addEventListener('click', ()=>{
+        if(action==='backspace' || label==='⌫'){ password.value = password.value.slice(0,-1); password.dispatchEvent(new Event('input')); return; }
+        if(action==='clear' || label==='Clear'){ password.value=''; password.dispatchEvent(new Event('input')); return; }
+        if(label==='Space'){ password.value += ' '; password.dispatchEvent(new Event('input')); return; }
+        if(label==='⇧'){ vkShift = !vkShift; return; }
+        const ch = vkShift ? String(label).toUpperCase() : String(label);
+        password.value += ch; password.dispatchEvent(new Event('input'));
+      });
+      (parent||vkKeys).appendChild(btn);
+    }
+
+    function renderNum(){
+      vkKeys.className = 'grid grid-cols-3 gap-2';
+      vkKeys.innerHTML='';
+      const nums = ['1','2','3','4','5','6','7','8','9','0'];
+      nums.sort(()=>Math.random()-0.5);
+      nums.forEach(n=> addKey(n));
+      addKey('⌫','backspace');
+      addKey('Clear','clear');
+    }
+
+    function renderFull(){
+      vkKeys.className = 'grid gap-2';
+      vkKeys.innerHTML='';
+      const rows = [
+        ['1','2','3','4','5','6','7','8','9','0'],
+        ['q','w','e','r','t','y','u','i','o','p'],
+        ['a','s','d','f','g','h','j','k','l'],
+        ['⇧','z','x','c','v','b','n','m','⌫'],
+        ['Space']
+      ];
+      rows.forEach(r=>{
+        const row = document.createElement('div');
+        row.className='flex gap-2 justify-center';
+        r.forEach(k=> addKey(k, null, row));
+        vkKeys.appendChild(row);
+      });
+    }
+
+    function renderVK(){ if(vkMode==='num') renderNum(); else renderFull(); }
+
+    if(vkToggle){ vkToggle.addEventListener('click', ()=>{ vkContainer.classList.toggle('hidden'); renderVK(); }); }
+    if(vkModeNum){ vkModeNum.addEventListener('click', ()=>{ vkMode='num'; renderVK(); }); }
+    if(vkModeFull){ vkModeFull.addEventListener('click', ()=>{ vkMode='full'; renderVK(); }); }
+    if(vkShuffle){ vkShuffle.addEventListener('click', ()=>{ if(vkMode==='num') renderNum(); }); }
+    if(vkClose){ vkClose.addEventListener('click', ()=> vkContainer.classList.add('hidden')); }
+
+    // Simple strength meter
+    const strengthBar = document.getElementById('strengthBar');
+    const strengthLabel = document.getElementById('strengthLabel');
+    function score(val){
+      let s=0; if(!val) return 0;
+      const hasLower=/[a-z]/.test(val), hasUpper=/[A-Z]/.test(val), hasDigit=/\d/.test(val), hasSym=/[^A-Za-z0-9 ]/.test(val);
+      [hasLower,hasUpper,hasDigit,hasSym].forEach(ok=>{ if(ok) s++; });
+      s += Math.min(4, Math.floor(val.length/3));
+      return Math.min(8,s);
+    }
+    function renderStrength(s){
+      const widths=['1/12','2/12','3/12','4/12','6/12','8/12','10/12','12/12'];
+      strengthBar.className='h-1 rounded transition-all';
+      strengthBar.classList.add(`w-${widths[s-1]||'1/12'}`);
+      let c='bg-red-500'; if(s>=3)c='bg-orange-500'; if(s>=5)c='bg-yellow-500'; if(s>=7)c='bg-emerald-500';
+      strengthBar.classList.add(c);
+      const labels=['weak','weak','okay','okay','good','good','strong','strong'];
+      strengthLabel.textContent=`Strength: ${labels[s-1]||'weak'}`;
+    }
+    password.addEventListener('input', ()=> renderStrength(score(password.value)));
+
+    // Validation & mock submit -> OTP step
+    const cid = document.getElementById('cid');
+    const cidError = document.getElementById('cidError');
+    const pwdError = document.getElementById('pwdError');
+    const loginForm = document.getElementById('loginForm');
+    const spinner = document.getElementById('spinner');
+    const submitBtn = document.getElementById('submitBtn');
+    const status = document.getElementById('status');
+
+    function show(el){el.classList.remove('hidden')} function hide(el){el.classList.add('hidden')}
+
+    loginForm.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      let ok = true;
+      if(!cid.value || cid.value.replace(/\D/g,'').length < 6){ show(cidError); ok=false; } else hide(cidError);
+      if(!password.value || password.value.length < 4){ show(pwdError); ok=false; } else hide(pwdError);
+      if(!ok) return;
+      spinner.classList.remove('hidden'); submitBtn.setAttribute('disabled','true'); status.textContent='Checking…';
+      setTimeout(()=>{ // mock server
+        spinner.classList.add('hidden'); submitBtn.removeAttribute('disabled'); status.textContent='';
+        openOtp();
+      }, 1000);
+    });
+
+    // OTP modal logic
+    const otpModal = document.getElementById('otpModal');
+    const otpInputs = () => Array.from(document.querySelectorAll('#otpModal .otp'));
+    const otpTimer = document.getElementById('otpTimer');
+    const resendOtp = document.getElementById('resendOtp');
+    const otpCancel = document.getElementById('otpCancel');
+    const otpVerify = document.getElementById('otpVerify');
+    let timerId; let remaining=30;
+    function startTimer(){ clearInterval(timerId); remaining=30; tick(); timerId=setInterval(tick,1000); }
+    function tick(){ remaining--; otpTimer.textContent = `00:${String(Math.max(0,remaining)).padStart(2,'0')}`; if(remaining<=0) clearInterval(timerId); }
+    function openOtp(){ otpModal.classList.remove('hidden'); otpInputs()[0].focus(); startTimer(); }
+    function closeOtp(){ otpModal.classList.add('hidden'); clearInterval(timerId); }
+
+    resendOtp.addEventListener('click', ()=>{ startTimer(); alert('New OTP sent (demo).'); });
+    otpCancel.addEventListener('click', closeOtp);
+    otpVerify.addEventListener('click', ()=>{ const code = otpInputs().map(i=>i.value).join(''); if(code.length===6){ closeOtp(); alert('Login successful (demo).'); } else { alert('Enter the 6-digit code.'); }});
+    otpInputs().forEach((inp,i)=>{
+      inp.addEventListener('input', ()=>{ if(inp.value && i<5) otpInputs()[i+1].focus(); });
+      inp.addEventListener('keydown', (e)=>{ if(e.key==='Backspace' && !inp.value && i>0) otpInputs()[i-1].focus(); });
+    });
+
+    // WebAuthn demo (placeholder)
+    const webauthnBtn = document.getElementById('webauthnBtn');
+    if(webauthnBtn){
+      webauthnBtn.addEventListener('click', async ()=>{
+        if(window.PublicKeyCredential){
+          alert('WebAuthn supported (demo). Integrate with your server to enable Face/Touch ID.');
+        } else {
+          alert('WebAuthn not supported on this device/browser.');
+        }
+      });
+    }
+
+    // Session timeout (simulated)
+    const banner = document.getElementById('timeoutBanner');
+    const countdown = document.getElementById('timeoutCountdown');
+    const staySignedIn = document.getElementById('staySignedIn');
+    let idle=0; const idleInterval = setInterval(()=>{ idle++; if(idle===60){ banner.classList.remove('hidden'); let left=60; const cInt=setInterval(()=>{ left--; countdown.textContent=String(left); if(left<=0){ clearInterval(cInt); banner.classList.add('hidden'); alert('Session ended (demo).'); } },1000); staySignedIn.onclick=()=>{ banner.classList.add('hidden'); idle=0; clearInterval(cInt); }; } },1000);
+    ['mousemove','keydown','click','scroll','touchstart'].forEach(evt=> document.addEventListener(evt, ()=>{ idle=0; }));
+
+    // Year
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
